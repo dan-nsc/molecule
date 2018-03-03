@@ -100,6 +100,21 @@ options:
       - Additional Vagrant options not explcitly exposed by this module.
     required: False
     default: None
+  synced_folder:
+    description:
+      - Enable synced_folder. Default mount is (., /vagrant). The '.' being relative to the molecule folder.
+    required: False
+    default: False
+  synced_folder__local_directory:
+    description:
+      - see synced_folder
+    required: False
+    default: '.'
+  synced_folder__remote_directory:
+    description:
+      - see synced_folder
+    required: False
+    default: '/vagrant'
   force_stop:
     description:
       - Force halt the instance, then destroy the instance.
@@ -155,19 +170,12 @@ Vagrant.configure('2') do |config|
 
     # Boot time optimization
     if provider['options']
-      if provider['options']['synced_folder']
-        config.vm.synced_folder provider['options']['synced_folder']
-      else
-        config.vm.synced_folder ".", "/vagrant", disabled: true
-      end
-
       if provider['options']['ssh_insert_key']
         config.ssh.insert_key = provider['options']['ssh_insert_key']
       else
         config.ssh.insert_key = false
       end
     else
-      config.vm.synced_folder ".", "/vagrant", disabled: true
       config.ssh.insert_key = false
     end
 
@@ -320,6 +328,22 @@ Vagrant.configure('2') do |config|
       end
     end
   end
+  
+  ##
+  # Synced folder
+  ##
+  if vagrant_config['synced_folder']
+    synced_folder = vagrant_config['synced_folder']
+    if synced_folder['local_directory'] and synced_folder['remote_directory']
+      config.vm.synced_folder synced_folder['local_directory'], synced_folder['remote_directory'], disabled: false
+    else
+      config.vm.synced_folder ".", "/vagrant", disabled: false
+    end
+  else
+    config.vm.synced_folder ".", "/vagrant", disabled: true
+  end
+
+  
 end
 '''.strip()  # noqa
 
@@ -424,6 +448,12 @@ class VagrantClient(object):
             }
         }
 
+        if self._module.params['synced_folder']:
+            d['synced_folder'] = {
+                'local_directory': self._module.params['synced_folder__local_directory'],
+                'remote_directory': self._module.params['synced_folder__remote_directory']
+            }
+
         # TODO(retr0h): Should we move this to config.merge_dicts()?
         d['provider']['options'].update(
             self._module.params['provider_options'])
@@ -446,6 +476,9 @@ def main():
             provider_options=dict(type='dict', default={}),
             provider_raw_config_args=dict(type='list', default=None),
             provision=dict(type='bool', default=False),
+            synced_folder=dict(type='bool', default=False),
+            synced_folder__local_directory=dict(type='str', default='.'),
+            synced_folder__remote_directory=dict(type='str', default='/vagrant'),
             force_stop=dict(type='bool', default=False),
             state=dict(type='str', default='up', choices=['up', 'destroy'])),
         supports_check_mode=False)
